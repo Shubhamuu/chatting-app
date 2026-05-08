@@ -1,5 +1,5 @@
-
-export const createChat = (req, res) => {
+import * as chatService from '../models/chat.model.js';
+export const createChat = async (req, res) => {
     try {
         const { chatId, participants } = req.body;
         if (!chatId || !participants || participants.length < 2) {
@@ -9,6 +9,8 @@ export const createChat = (req, res) => {
             });
         }
         // Here you would typically save the chat to the database
+        const chat = await chatService.createChat(participants);
+        
         res.status(201).json({
             success: true,
             chat: { chatId, participants },
