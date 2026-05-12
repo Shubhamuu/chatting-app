@@ -1,29 +1,41 @@
-import jwt from 'jsonwebtoken';
-import User from '../models/user.js';
-import { ACCESS_SECRET } from '../constants/getenv.js';
+import jwt from "jsonwebtoken";
+import User from "../models/user.js";
 
+const ACCESS_SECRET = process.env.ACCESS_SECRET;
 
-//const REFRESH_SECRET = require('../constants/getenv').REFRESH_SECRET;
-
-exports.protect = async (req, res, next) => {
+export const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
 
-  if (!authHeader || !authHeader.startsWith('Bearer '))
-    return res.status(401).json({ message: 'Unauthorized: No token' });
+  if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    return res.status(401).json({
+      message: "Unauthorized: No token",
+    });
+  }
 
-  const token = authHeader.split(' ')[1];
+  const token = authHeader.split(" ")[1];
 
   try {
     const decoded = jwt.verify(token, ACCESS_SECRET);
-    const user = await User.findById(decoded.id).select('-password');
-    //console.log('Decoded user:', decoded);
-    if (!user) return res.status(401).json({ message: 'Unauthorized: User not found' });
+
+    const user = await User.findById(decoded.id)
+      .select("-password");
+
+    if (!user) {
+      return res.status(401).json({
+        message: "Unauthorized: User not found",
+      });
+    }
 
     req.user = user;
 
     next();
+
   } catch (err) {
-    console.log('Error in protect middleware:', err);
-    return res.status(401).json({ message: 'Unauthorized: Invalid token' });
+    console.log("Error in auth middleware:", err);
+
+    return res.status(401).json({
+      message: "Unauthorized: Invalid token",
+    });
   }
 };
+export default authMiddleware;

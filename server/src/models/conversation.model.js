@@ -1,3 +1,7 @@
+import mongoose from 'mongoose';
+
+const { Schema } = mongoose;
+
 const ConversationSchema = new mongoose.Schema({
   participants: [{
     type: mongoose.Schema.Types.ObjectId,

@@ -1,10 +1,10 @@
 import User from '../models/user.js';
-import Chat from '../models/chat.js';
-import Message from '../models/message.js';
+import Conversation from '../models/conversation.model.js';
+import Message from '../models/message.model.js';
 
 export const createChat = async (participants) => {
     try {
-    const chat = new Chat({ participants });
+    const chat = new Conversation({ participants });
     await chat.save();
     return chat;
     } catch (error) {
