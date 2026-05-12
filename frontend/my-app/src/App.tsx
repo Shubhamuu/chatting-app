@@ -1,14 +1,17 @@
 import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from './assets/vite.svg'
-import heroImg from './assets/hero.png'
+
 import './App.css'
+import Login from './pages/auth/login.tsx'
+import { Navigate, Outlet, Route, Routes } from 'react-router'
 
 function App() {
   return (
-<>
-<h1>Hello world</h1></>
-  )
+     <Routes >
+        <Route path="/" element={<Login />} />
+     </Routes>
+ 
+  ) 
+
 }
 
 export default App

@@ -1,9 +1,9 @@
 import mongoose from 'mongoose';
-
+import{ MONGO_URI, DB_NAME } from '../constants/getenv.js';
 const connectDB = async () => {
   try {
-    const conn = await mongoose.connect(process.env.MONGO_URI, {
-      dbName: process.env.DB_NAME,
+    const conn = await mongoose.connect(MONGO_URI, {
+      dbName: DB_NAME,
     });
 
     console.log(` MongoDB Connected: ${conn.connection.host}`);

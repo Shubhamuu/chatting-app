@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { generateToken } from '../utils/token.js';
+import { generateTokens } from '../utils/token.js';
 
 import User from '../models/user.js';
 
@@ -35,16 +35,16 @@ export const registerUser = async ({ name, email, password }) => {
     }
 
     // generate token
-    const token = generateToken(user._id);
+    const { accessToken, refreshToken } = await generateTokens( { _id: user._id, name: user.name, email: user.email } );
 
     // rollback if token generation fails
-    if (!token) {
-      await User.findByIdAndDelete(user._id);
+    if (!accessToken || !refreshToken) {
+  
 
       throw new Error('Token generation failed');
     }
 
-    return { token };
+    return { token: { accessToken, refreshToken }, user: { id: user._id, name: user.name, email: user.email } };
   } catch (error) {
     throw new Error(error.message || 'Registration failed');
   }
@@ -72,21 +72,19 @@ export const loginUser = async ({ email, password }) => {
     if (!isMatch) {
       throw new Error('Invalid credentials');
     }
-
-    console.log('Login successful for user:', user._id);
-
     // generate token
-    const token = generateToken(user._id);
+    const { accessToken, refreshToken } = await generateTokens( { _id: user._id, name: user.name, email: user.email } );
 
-    if (!token) {
+    if (!accessToken || !refreshToken) {
       throw new Error('Token generation failed');
     }
+ 
 
    const { password: _, ...userWithoutPassword } = user.toObject();
-
+ console.log('Login successful for user:', user._id);
 return {
   user: userWithoutPassword,
-  token,
+  tokens: { accessToken, refreshToken }
 };
   } catch (error) {
     console.error('Login error:', error.message);
