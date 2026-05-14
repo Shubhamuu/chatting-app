@@ -54,7 +54,6 @@ export const login = async (req, res) => {
 export const logout = async (req, res) => {
   try {
     const result = await authService.logoutUser();
-
     res.json({
       success: true,
       ...result,
@@ -66,8 +65,39 @@ export const logout = async (req, res) => {
     });
   }
 };
+
+export const generateAccessToken = async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+    if (!refreshToken) {
+      return res.status(401).json({
+        success: false,
+        message: "No refresh token provided",
+      });
+    } 
+    const tokens = await authService.refreshTokens(refreshToken);
+    res.cookie("refreshToken", tokens.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "lax",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+      path: "/",
+    });
+   
+    res.json({
+      success: true,
+       accessToken: tokens.accessToken
+    });
+  } catch (error) {
+    res.status(401).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};  
 export default {
   register,
   login,
   logout,
+  generateAccessToken,
 };

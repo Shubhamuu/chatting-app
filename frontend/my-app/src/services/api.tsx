@@ -6,7 +6,7 @@ const BACKEND_URL = "http://localhost:5000/api";
 /* Used for login, refresh token, public routes */
 const api = axios.create({
   baseURL: BACKEND_URL,
-  withCredentials: true, // ✅ CRITICAL: Sends cookies with every request
+  withCredentials: true,
 });
 
 export default api;
@@ -15,11 +15,10 @@ export default api;
 /* Used for protected routes */
 export const apiprivate = axios.create({
   baseURL: BACKEND_URL,
-  withCredentials: true, // ✅ CRITICAL: Sends cookies with every request
+  withCredentials: true, 
 });
 
 /* -------------------- REFRESH LOGIC -------------------- */
-
 let isRefreshing = false;
 let failedQueue = [];
 
@@ -55,7 +54,7 @@ const handleLogout = () => {
 apiprivate.interceptors.request.use(
   (config) => {
     const accessToken = localStorage.getItem("accessToken");
-
+    console.log("Attaching access token to request:", accessToken);
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
@@ -109,7 +108,7 @@ apiprivate.interceptors.response.use(
           ✅ REFRESH TOKEN AUTOMATICALLY SENT VIA COOKIE 
           Backend reads: req.cookies.refreshToken
         */
-        const response = await apiprivate.get("/auth/access-token");
+        const response = await apiprivate.get("/auth/generate-token");
         const { accessToken } = response.data;
 
         if (!accessToken) {

@@ -1,11 +1,9 @@
-import jwt from "jsonwebtoken";
+import {verifyToken} from "../utils/token.js";
 import User from "../models/user.js";
-
-const ACCESS_SECRET = process.env.ACCESS_SECRET;
 
 export const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
-
+    console.log(req.headers);
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({
       message: "Unauthorized: No token",
@@ -15,14 +13,17 @@ export const authMiddleware = async (req, res, next) => {
   const token = authHeader.split(" ")[1];
 
   try {
-    const decoded = jwt.verify(token, ACCESS_SECRET);
-
+    const decoded = verifyToken(token);
+    if (!decoded) {
+      console.log("Token verification failed in middleware", decoded);
+   return res.status(401).json({ message: 'Unauthorized: Invalid token or expired token' });
+    }
     const user = await User.findById(decoded.id)
       .select("-password");
 
     if (!user) {
       return res.status(401).json({
-        message: "Unauthorized: User not found",
+        message: "Unauthorized: User not found or token expired",
       });
     }
 
@@ -32,9 +33,8 @@ export const authMiddleware = async (req, res, next) => {
 
   } catch (err) {
     console.log("Error in auth middleware:", err);
-
     return res.status(401).json({
-      message: "Unauthorized: Invalid token",
+      message: "Unauthorized: Invalid token, middleware error",
     });
   }
 };

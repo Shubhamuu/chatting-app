@@ -24,21 +24,29 @@ export const createChat = async (req, res) => {
     }
 };
 export const getUserChats = async (req, res) => {
-    try {
-        const userId = req.user._id;    
-        const chats = await chatService.getUserChats(userId);
+  try {
+    const userId = req.user._id;
 
-        res.json({
-            success: true,
-            chats,
-        });
-    }
-    catch (error) {
-        res.status(500).json({
-            success: false,
-            message: error.message,
-        });
-    }
+    const page = Number(req.query.page) || 1;
+    const limit = Number(req.query.limit) || 10;
+
+    const result = await chatService.getUserChats(
+      userId,
+      page,
+      limit
+    );
+
+    res.json({
+      success: true,
+      ...result,
+    });
+
+  } catch (error) {
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
 };
 
 export const sendMessage = async (req, res) => {

@@ -98,3 +98,28 @@ export const logoutUser = async () => {
   // JWT is stateless → logout handled on client
   return { message: 'Logged out successfully' };
 };
+export const refreshToken = async (refreshToken) => {
+  try {
+    if (!refreshToken) {
+      throw new Error('Refresh token is required');
+    }
+    const { Token } = await SendTokenRefreshToken(refreshToken);
+
+    if (!Token) {
+      throw new Error('Invalid refresh token');
+    }
+      if (!Token.accessToken && !Token.refreshToken) {
+      throw new Error('Failed to generate access token and refresh token');
+    }
+    return { Token };
+  } catch (error) {
+    throw new Error(error.message || 'Token refresh failed');
+  }
+};
+
+export default {
+  registerUser,
+  loginUser,
+  logoutUser,
+  refreshToken
+};
