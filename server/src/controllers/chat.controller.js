@@ -1,4 +1,5 @@
 import * as chatService from '../services/chat.service.js';
+import { getIO } from '../sockets/index.js';
 export const createChat = async (req, res) => {
     try {
         const { chatId, participants } = req.body;
@@ -60,9 +61,45 @@ export const sendMessage = async (req, res) => {
             });
         }
         const message = await chatService.sendMessage(chatId, senderId, content);
+        
+        const messageWithSender = {
+            ...message.toObject(),
+            sender: {
+                _id: req.user._id,
+                name: req.user.name,
+            }
+        };
+
+        const io = getIO();
+        io.to(chatId).emit('receive_message', messageWithSender);
+
         res.status(201).json({
             success: true,
-            message,
+            message: messageWithSender,
+        });
+    }
+    catch (error) {
+        res.status(500).json({
+            success: false,
+            message: error.message,
+        });
+    }
+};
+export const getChatMessages = async (req, res) => {
+    try {
+        const { chatId } = req.params;
+        if (!chatId) {
+            return res.status(400).json({
+                success: false,
+                message: 'Chat ID is required',
+            });
+        }
+        const messages = await chatService.getChatMessages(chatId);
+       //  console.log('Fetched messages for chat', chatId, messages);
+
+        return res.json({
+            success: true,
+            messages,
         });
     }
     catch (error) {
@@ -76,4 +113,5 @@ export default {
     createChat,
     getUserChats,
     sendMessage,
+    getChatMessages,
 };

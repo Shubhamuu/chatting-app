@@ -3,7 +3,7 @@ import User from "../models/user.js";
 
 export const authMiddleware = async (req, res, next) => {
   const authHeader = req.headers.authorization;
-    console.log(req.headers);
+    // console.log(req.headers.authorization);
   if (!authHeader || !authHeader.startsWith("Bearer ")) {
     return res.status(401).json({
       message: "Unauthorized: No token",
@@ -15,7 +15,7 @@ export const authMiddleware = async (req, res, next) => {
   try {
     const decoded = verifyToken(token);
     if (!decoded) {
-      console.log("Token verification failed in middleware", decoded);
+      //console.log("Token verification failed in middleware", decoded);
    return res.status(401).json({ message: 'Unauthorized: Invalid token or expired token' });
     }
     const user = await User.findById(decoded.id)

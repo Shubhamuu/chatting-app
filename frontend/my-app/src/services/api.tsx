@@ -1,9 +1,12 @@
-import axios from "axios";
+import axios, {
+  AxiosError,
+  InternalAxiosRequestConfig,
+} from "axios";
 
 const BACKEND_URL = "http://localhost:5000/api";
 
 /* -------------------- PUBLIC AXIOS INSTANCE -------------------- */
-/* Used for login, refresh token, public routes */
+
 const api = axios.create({
   baseURL: BACKEND_URL,
   withCredentials: true,
@@ -12,38 +15,60 @@ const api = axios.create({
 export default api;
 
 /* -------------------- PRIVATE AXIOS INSTANCE -------------------- */
-/* Used for protected routes */
+
 export const apiprivate = axios.create({
   baseURL: BACKEND_URL,
-  withCredentials: true, 
+  withCredentials: true,
 });
 
-/* -------------------- REFRESH LOGIC -------------------- */
-let isRefreshing = false;
-let failedQueue = [];
+/* -------------------- TYPES -------------------- */
 
-const processQueue = (error, token = null) => {
+interface RefreshResponse {
+  accessToken: string;
+}
+
+interface RetryAxiosRequestConfig extends InternalAxiosRequestConfig {
+  _retry?: boolean;
+}
+
+type FailedRequest = {
+  resolve: (token: string) => void;
+  reject: (error: AxiosError | Error) => void;
+};
+
+/* -------------------- REFRESH LOGIC -------------------- */
+
+let isRefreshing = false;
+let failedQueue: FailedRequest[] = [];
+
+const processQueue = (
+  error: AxiosError | Error | null,
+  token: string | null = null
+) => {
   failedQueue.forEach((prom) => {
-    if (error) prom.reject(error);
-    else prom.resolve(token);
+    if (error) {
+      prom.reject(error);
+    } else if (token) {
+      prom.resolve(token);
+    }
   });
+
   failedQueue = [];
 };
 
 const handleLogout = () => {
-  // Clear storage
   localStorage.removeItem("accessToken");
   localStorage.removeItem("user");
-  
-  // Clear axios headers
+
   delete apiprivate.defaults.headers.common.Authorization;
-  
-  // Emit custom event for app-wide handling
-  window.dispatchEvent(new CustomEvent('auth:logout'));
-  
-  // Fallback to hard redirect if event not handled
+
+  window.dispatchEvent(new CustomEvent("auth:logout"));
+
   setTimeout(() => {
-    if (window.location.pathname !== '/' && window.location.pathname !== '/login') {
+    if (
+      window.location.pathname !== "/" &&
+      window.location.pathname !== "/login"
+    ) {
       window.location.href = "/login";
     }
   }, 100);
@@ -52,45 +77,52 @@ const handleLogout = () => {
 /* -------------------- REQUEST INTERCEPTOR -------------------- */
 
 apiprivate.interceptors.request.use(
-  (config) => {
+  (config: InternalAxiosRequestConfig) => {
     const accessToken = localStorage.getItem("accessToken");
-    console.log("Attaching access token to request:", accessToken);
+
     if (accessToken) {
       config.headers.Authorization = `Bearer ${accessToken}`;
     }
 
     return config;
   },
-  (error) => Promise.reject(error)
+  (error: AxiosError) => Promise.reject(error)
 );
 
 /* -------------------- RESPONSE INTERCEPTOR -------------------- */
 
 apiprivate.interceptors.response.use(
   (response) => response,
-  async (error) => {
-    // Handle network errors (no response from server)
+  async (error: AxiosError) => {
     if (!error.response) {
       console.error("Network error:", error.message);
       return Promise.reject(error);
     }
 
-    const originalRequest = error.config;
-    const isAuthError = 
-      error.response?.status === 401 || 
-      error.response?.status === 403;
-    
-    const isAuthEndpoint = 
-      originalRequest.url?.includes("/login") || 
-      originalRequest.url?.includes("/auth/access-token") ||
-      originalRequest.url?.includes("/auth/refresh");
+    const originalRequest =
+      error.config as RetryAxiosRequestConfig;
 
-    // Only attempt refresh for auth errors on non-auth endpoints
-    if (isAuthError && !originalRequest._retry && !isAuthEndpoint) {
-      
-      // If already refreshing, queue this request
+    if (!originalRequest) {
+      return Promise.reject(error);
+    }
+
+    const isAuthError =
+      error.response.status === 401 ||
+      error.response.status === 403;
+
+    const isAuthEndpoint =
+      originalRequest.url?.includes("/login") ||
+      originalRequest.url?.includes("/auth/access-token") ||
+      originalRequest.url?.includes("/auth/refresh") ||
+      originalRequest.url?.includes("/auth/generate-token");
+
+    if (
+      isAuthError &&
+      !originalRequest._retry &&
+      !isAuthEndpoint
+    ) {
       if (isRefreshing) {
-        return new Promise((resolve, reject) => {
+        return new Promise<string>((resolve, reject) => {
           failedQueue.push({ resolve, reject });
         })
           .then((token) => {
@@ -104,41 +136,38 @@ apiprivate.interceptors.response.use(
       isRefreshing = true;
 
       try {
-        /* 
-          ✅ REFRESH TOKEN AUTOMATICALLY SENT VIA COOKIE 
-          Backend reads: req.cookies.refreshToken
-        */
-        const response = await apiprivate.get("/auth/generate-token");
+        const response = await apiprivate.get<RefreshResponse>(
+          "/auth/generate-token"
+        );
+
         const { accessToken } = response.data;
 
         if (!accessToken) {
           throw new Error("No access token received from refresh");
         }
 
-        /* ✅ UPDATE HEADERS FIRST */
-        apiprivate.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
-        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
-
-        /* ✅ SAVE NEW ACCESS TOKEN */
         localStorage.setItem("accessToken", accessToken);
 
-        /* ✅ PROCESS QUEUED REQUESTS */
+        apiprivate.defaults.headers.common.Authorization = `Bearer ${accessToken}`;
+
+        originalRequest.headers.Authorization = `Bearer ${accessToken}`;
+
         processQueue(null, accessToken);
 
-        /* ✅ RETRY ORIGINAL REQUEST */
         return apiprivate(originalRequest);
-
       } catch (err) {
-        console.error("Token refresh failed:", err.response?.data?.message || err.message);
-        
-        /* ❌ PROCESS QUEUE WITH ERROR */
-        processQueue(err, null);
+        const refreshError =
+          err instanceof Error
+            ? err
+            : new Error("Token refresh failed");
 
-        /* ❌ LOGOUT USER (clears everything including refresh token cookie) */
+        console.error(refreshError.message);
+
+        processQueue(refreshError, null);
+
         handleLogout();
 
-        return Promise.reject(err);
-
+        return Promise.reject(refreshError);
       } finally {
         isRefreshing = false;
       }

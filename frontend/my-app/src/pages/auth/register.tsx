@@ -2,27 +2,35 @@ import React, { useState } from "react";
 import { useNavigate, Link } from "react-router";
 import api from "../../services/api";
 
-function Login() {
+function Register() {
   const navigate = useNavigate();
 
   const [formData, setFormData] = useState({
+    name: "",
     email: "",
     password: "",
+    confirmPassword: "",
   });
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState(false);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     setFormData({ ...formData, [e.target.name]: e.target.value });
     setError("");
   };
 
-  const handleLogin = async (e: React.FormEvent) => {
+  const handleRegister = async (e: React.FormEvent) => {
     e.preventDefault();
 
-    if (!formData.email || !formData.password) {
-      setError("Email and password are required");
+    if (!formData.name || !formData.email || !formData.password) {
+      setError("All fields are required");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
       return;
     }
 
@@ -37,32 +45,21 @@ function Login() {
     setError("");
 
     try {
-      const res = await api.post("auth/login", {
+      const res = await api.post("auth/register", {
+        name: formData.name,
         email: formData.email,
         password: formData.password,
       });
-      console.log("Login response:", res);
-
-      const data = res.data;
-
-      // Store tokens
-      localStorage.setItem("accessToken", data.tokens.accessToken);
-      localStorage.setItem("user", JSON.stringify(data.user));
-
-      const { role } = data.user;
-      console.log("User role:", role);
-
-      let targetPath = "/chat/general"; // Default path for regular users
-
-      if (role === "admin") {
-        targetPath = "/admin/dashboard";
-      }
+      console.log("Register response:", res);
       
-      navigate(targetPath, { replace: true });
+      setSuccess(true);
+      setTimeout(() => {
+        navigate("/login");
+      }, 2000);
     } catch (err: any) {
-      console.error("Login error:", err);
+      console.error("Register error:", err);
       if (err.response) {
-        setError(err.response.data.message || "Login failed");
+        setError(err.response.data.message || "Registration failed");
       } else {
         setError("Network error. Please try again.");
       }
@@ -199,6 +196,17 @@ function Login() {
           text-align: center;
         }
 
+        .success-message {
+          background: rgba(34, 197, 94, 0.1);
+          border: 1px solid rgba(34, 197, 94, 0.2);
+          color: #4ade80;
+          padding: 12px;
+          border-radius: 12px;
+          font-size: 13px;
+          margin-bottom: 20px;
+          text-align: center;
+        }
+
         .auth-footer {
           margin-top: 24px;
           text-align: center;
@@ -217,32 +225,31 @@ function Login() {
           color: #c084fc;
           text-decoration: underline;
         }
-
-        .forgot-password {
-          display: block;
-          text-align: right;
-          font-size: 12px;
-          color: #94a3b8;
-          margin-top: -12px;
-          margin-bottom: 20px;
-          text-decoration: none;
-          transition: color 0.2s;
-        }
-
-        .forgot-password:hover {
-          color: white;
-        }
       `}</style>
 
       <div className="auth-card">
         <div className="auth-header">
-          <h1>Welcome Back</h1>
-          <p>Please enter your details to sign in</p>
+          <h1>Create Account</h1>
+          <p>Join our community today</p>
         </div>
 
         {error && <div className="error-message">{error}</div>}
+        {success && <div className="success-message">Registration successful! Redirecting to login...</div>}
 
-        <form onSubmit={handleLogin}>
+        <form onSubmit={handleRegister}>
+          <div className="form-group">
+            <label className="form-label">Full Name</label>
+            <input
+              type="text"
+              name="name"
+              className="form-input"
+              placeholder="John Doe"
+              value={formData.name}
+              onChange={handleChange}
+              required
+            />
+          </div>
+
           <div className="form-group">
             <label className="form-label">Email Address</label>
             <input
@@ -269,17 +276,28 @@ function Login() {
             />
           </div>
 
-          <a href="#" className="forgot-password">Forgot password?</a>
+          <div className="form-group">
+            <label className="form-label">Confirm Password</label>
+            <input
+              type="password"
+              name="confirmPassword"
+              className="form-input"
+              placeholder="••••••••"
+              value={formData.confirmPassword}
+              onChange={handleChange}
+              required
+            />
+          </div>
 
           <button type="submit" className="auth-button" disabled={loading}>
-            {loading ? "Signing in..." : "Login"}
+            {loading ? "Creating account..." : "Register"}
           </button>
         </form>
 
         <div className="auth-footer">
-          Don't have an account?{" "}
-          <Link to="/register" className="auth-link">
-            Sign up
+          Already have an account?{" "}
+          <Link to="/login" className="auth-link">
+            Log in
           </Link>
         </div>
       </div>
@@ -287,4 +305,4 @@ function Login() {
   );
 }
 
-export default Login;
+export default Register;

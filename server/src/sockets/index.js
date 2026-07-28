@@ -1,67 +1,33 @@
-import { Server } from 'socket.io';
+import { Server } from "socket.io";
+import registerChatSocket from "./chat.socket.js";
+import registerNotificationSocket from "./notification.socket.js";
 
-//import chatSocket from './chat.socket.js';
-//import callSocket from './call.socket.js';
+let io;
 
-
-/* export const initSocket = (server) => {
-  const io = new Server(server, {
-    cors: {
-      origin: '*', // restrict in production
-      methods: ['GET', 'POST']
-    }
-  });
-
-  io.on('connection', (socket) => {
-    console.log(`🔌 User connected: ${socket.id}`);
-
-    // OPTIONAL: attach userId (from auth middleware or handshake)
-
-
-    // Join personal room
-    if (userId) {
-      socket.join(userId);
-    }
-
-    // Register feature sockets
-    chatSocket(io, socket);
-    callSocket(io, socket);
-
-    socket.on('disconnect', () => {
-      console.log(`❌ User disconnected: ${socket.id}`);
-    });
-  });
-}; */
 export const initSocket = (server) => {
-  const io = new Server(server, {
+  io = new Server(server, {
     cors: {
-      origin: '*', // restrict in production
-      methods: ['GET', 'POST']
-    }
+      origin: "http://localhost:5173",
+      credentials: true,
+    },
   });
 
-  io.on('connection', (socket) => {
-    console.log(`🔌 User connected: ${socket.id}`);
+  io.on("connection", (socket) => {
+    console.log("User connected:", socket.id);
 
-    // OPTIONAL: attach userId (from auth middleware or handshake)
+    // register modules
+    registerChatSocket(io, socket);
+    registerNotificationSocket(io, socket);
 
-
-    // Join personal room
-   
-      socket.on("message", (data) => {
-        io.emit("message", data);
-      });
-
-    // Register feature sockets
-    
-
-    socket.on('disconnect', () => {
-      console.log(`❌ User disconnected: ${socket.id}`);
+    socket.on("disconnect", () => {
+      console.log("User disconnected:", socket.id);
     });
   });
+
+  return io;
 };
-// optional getter (useful in services if needed)
+
 export const getIO = () => {
-  if (!io) throw new Error('Socket.io not initialized');
+  if (!io) throw new Error("Socket.io not initialized!");
   return io;
 };

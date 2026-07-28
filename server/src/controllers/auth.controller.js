@@ -68,14 +68,20 @@ export const logout = async (req, res) => {
 
 export const generateAccessToken = async (req, res) => {
   try {
-    const refreshToken = req.cookies.refreshToken;
+    const refreshToken = req.cookies?.refreshToken;
+
+   // console.log("Cookies:", req.cookies || {});
+    //console.log("Refresh token:", refreshToken);
+
     if (!refreshToken) {
       return res.status(401).json({
         success: false,
         message: "No refresh token provided",
       });
-    } 
-    const tokens = await authService.refreshTokens(refreshToken);
+    }
+
+    const tokens = await authService.refreshToken(refreshToken);
+
     res.cookie("refreshToken", tokens.refreshToken, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
@@ -83,18 +89,25 @@ export const generateAccessToken = async (req, res) => {
       maxAge: 7 * 24 * 60 * 60 * 1000,
       path: "/",
     });
-   
-    res.json({
+
+    return res.json({
       success: true,
-       accessToken: tokens.accessToken
+      accessToken: tokens.accessToken,
     });
+
   } catch (error) {
-    res.status(401).json({
+    console.error("Refresh token error:", error.message);
+
+    res.clearCookie("refreshToken", {
+      path: "/",
+    });
+
+    return res.status(401).json({
       success: false,
       message: error.message,
     });
   }
-};  
+};
 export default {
   register,
   login,

@@ -1,5 +1,5 @@
 import bcrypt from 'bcryptjs';
-import { generateTokens } from '../utils/token.js';
+import { generateTokens,SendTokenRefreshToken } from '../utils/token.js';
 
 import User from '../models/user.js';
 
@@ -44,7 +44,7 @@ export const registerUser = async ({ name, email, password }) => {
       throw new Error('Token generation failed');
     }
 
-    return { token: { accessToken, refreshToken }, user: { id: user._id, name: user.name, email: user.email } };
+    return { tokens: { accessToken, refreshToken }, user: { id: user._id, name: user.name, email: user.email } };
   } catch (error) {
     throw new Error(error.message || 'Registration failed');
   }
@@ -61,14 +61,15 @@ export const loginUser = async ({ email, password }) => {
 
     // find user
     const user = await User.findOne({ email }).select('+password');
-
+    console.log('User found:', user );
     if (!user) {
+      console.log('No user found with email:', email);
       throw new Error('Invalid credentials');
     }
 
     // compare password
     const isMatch = await bcrypt.compare(password, user.password);
-
+     
     if (!isMatch) {
       throw new Error('Invalid credentials');
     }
@@ -103,15 +104,16 @@ export const refreshToken = async (refreshToken) => {
     if (!refreshToken) {
       throw new Error('Refresh token is required');
     }
-    const { Token } = await SendTokenRefreshToken(refreshToken);
-
+    //console.log('Received refresh token:', refreshToken);
+    const Token = await SendTokenRefreshToken(refreshToken);
+    console.log('Token refresh result auth service:', Token);
     if (!Token) {
       throw new Error('Invalid refresh token');
     }
       if (!Token.accessToken && !Token.refreshToken) {
       throw new Error('Failed to generate access token and refresh token');
     }
-    return { Token };
+    return  Token ;
   } catch (error) {
     throw new Error(error.message || 'Token refresh failed');
   }

@@ -8,7 +8,8 @@
   "main": "index.js",
   "scripts": {
     "dev": "nodemon index.js",
-    "start": "node index.js"
+    "start": "node index.js",
+    "seed": "node scripts/sedding.js"
   },
   "dependencies": {
     "bcryptjs": "^3.0.3",

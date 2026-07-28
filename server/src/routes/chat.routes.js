@@ -9,6 +9,11 @@ router.use(authMiddleware);
 router.post('/', chatController.createChat);
 // Get all chats for a user
 router.get('/', chatController.getUserChats);
+router.get('/:chatId/messages', chatController.getChatMessages);
+// Send a message in a chat
+router.post('/message', chatController.sendMessage);
+// Get friends list
+//router.get('/friends', chatController.getFriendsList);
 
 
 export default router;

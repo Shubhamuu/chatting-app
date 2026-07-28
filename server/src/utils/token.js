@@ -4,7 +4,7 @@ import{ ACCESS_SECRET, REFRESH_SECRET } from '../constants/getenv.js';
 const generateTokens = async ({ _id, name, email }) => {
   const payload = { id: _id, name, email };
   
-  const accessToken = jwt.sign(payload, ACCESS_SECRET, { expiresIn: "15m" });
+  const accessToken = jwt.sign(payload, ACCESS_SECRET, { expiresIn: "30m" });
   const refreshToken = jwt.sign(payload, REFRESH_SECRET, { expiresIn: "7d" });
 
 
@@ -21,8 +21,8 @@ const SendTokenRefreshToken = async (refreshToken) => {
     if (!refreshToken) return null;
 
     // 1. Verify JWT signature & expiry
-    const decoded = jwt.verify(refreshToken, REFRESH_SECRET);
-console.log("Decoded refresh token:", decoded);
+    const decoded = await jwt.verify(refreshToken, REFRESH_SECRET);
+//console.log("Decoded refresh token:", decoded);
     // 2. Check DB for existence AND ownership
  /*    const storedToken = await Token.findOne({
       token: refreshToken,
@@ -33,7 +33,8 @@ console.log("Decoded refresh token:", decoded);
       console.log("Refresh token not found in DB");
       return null; // revoked or reused token
     } */
-    const token = generateTokens({ _id: decoded.id, name: decoded.name, email: decoded.email });
+    const token = await generateTokens({ _id: decoded.id, name: decoded.name, email: decoded.email });
+    //console.log("Generated new tokens from refresh token:", token);
     return token;
   } catch (error) {
     return null;
@@ -54,10 +55,10 @@ const verifyToken = (token) => {
       console.log("Token verification failed");
       return null;
     }
-    console.log("Access token verified successfully.");
+    //console.log("Access token verified successfully.");
     return userData;
   } catch (err) {
-    console.log("Error verifying token:", err);
+    console.log("Error verifying token:");
     return null;
   }
 }

@@ -40,7 +40,12 @@ Conversation.find({
         participants: userId,
       }),
     ]);
-
+// update to delivered
+    await Message.updateMany(
+      { conversationId: { $in: chats.map((c) => c._id) }, sender: { $ne: userId }, status: 'sent' },
+      { $set: { status: 'delivered' } }
+    );
+    
     return {
       chats,
       totalChats,
@@ -58,7 +63,15 @@ Conversation.find({
 
 export const sendMessage = async (chatId, senderId, content) => {
     try {
-        const message = new Message({ chat: chatId, sender: senderId, content });   
+      const message = await new Message({ conversationId: chatId, sender: senderId, content: content, messageType: "text", updatedAt: new Date(), createdAt: new Date()  }).save();
+         
+        const conversation = await Conversation.findById(chatId);
+        if (!conversation) {
+            throw new Error('Chat not found');
+        }
+        conversation.lastMessage = message._id;
+        conversation.lastActivity = new Date();
+        await conversation.save();
         await message.save();
         return message;
     }
@@ -76,5 +89,39 @@ export const getFriendsList = async (userId) => {
     } catch (error) {
         throw new Error('Failed to fetch friends list: ' + error.message);
     }
+}
+export const getChatMessages = async (chatId, page = 1, limit = 20) => {
+    try {
+        const skip = (page - 1) * limit;
+        const messages = await Message.find({ conversationId: chatId })
+            .populate('sender', 'name')
+            .sort({ createdAt: -1 })
+            .skip(skip)
+            .limit(limit);
+        const totalMessages = await Message.countDocuments({ conversationId: chatId });
+        // update messages to seen
+        await Message.updateMany(
+            { conversationId: chatId, status: 'sent' },
+            { $set: { status: 'seen' } }
+        );
+
+
+        return {
+            messages,
+            totalMessages,
+            currentPage: page,
+            totalPages: Math.ceil(totalMessages / limit),
+            hasNextPage: page * limit < totalMessages,  
+        }
+    } catch (error) {
+        throw new Error('Failed to fetch chat messages: ' + error.message);
+    } 
+}
+export default {
+    createChat,
+    getUserChats,
+    sendMessage,
+    getChatMessages,
+    getFriendsList
 }
 

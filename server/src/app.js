@@ -4,6 +4,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 import { frontendURL } from './constants/getenv.js';
 import routes from './routes/index.js';
+import cookieParser from "cookie-parser";
+
 
 const app = express();
 
@@ -20,7 +22,7 @@ app.use(cors({
 
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-
+app.use(cookieParser());
 // Health check
 app.get('/', (req, res) => {
   res.sendFile(path.join(__dirname, '../public/index.html'));
