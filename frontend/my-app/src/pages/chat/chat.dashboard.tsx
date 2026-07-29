@@ -3,7 +3,13 @@ import { apiprivate } from '../../services/api';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 import './chat.dashboard.css';
-const socket = io('http://localhost:5000', { withCredentials: true });
+const socket = io("http://localhost:5000", {
+  withCredentials: true,
+  transports: ['websocket'],
+  reconnection: true,
+  reconnectionAttempts: 10,
+});
+
 
 import type {
   User,
@@ -59,14 +65,19 @@ const mapChat = (c: ApiChat): Chat =>{
       p0?.name === currentUser.name ? p1?._id : p0?._id ?? null,
   };
 };
-
+const getChatId = (chat: unknown): string => {
+  if (!chat) return "";
+  if (typeof chat === "string") return chat;
+  if (typeof chat === "object" && "_id" in chat) return (chat as { _id: string })._id;
+  return "";
+};
 const mapMessage = (msg: ApiMessage): Message => ({
   _id: msg._id ?? msg.id ?? "",
   text: msg.content ?? msg.text ?? '',
   senderId: msg.sender?._id ?? msg.senderId ?? '',
   senderName: msg.sender?.name ?? msg.senderName ?? '',
   time: msg.createdAt ?? msg.time ?? new Date().toISOString(),
-  chatId: msg.chat ?? msg.chatId ?? "",
+  chatId: getChatId(msg.chat) || (msg.chatId ?? ""),
 });
 
 const sortChats = (list: Chat[]): Chat[] =>
@@ -407,33 +418,49 @@ const fetchChats = useCallback(
   /* ── 6. receive_message socket handler ──
      Re-registers when activeChatId changes so the badge logic
      correctly knows which chat is currently open.               */
- useEffect(() => {
-  const handler = (apiMsg: ApiMessage) => {
-    const chatId = apiMsg.chat ?? apiMsg.chatId;
-
-    if (!chatId) return;
-
+useEffect(() => {
+const handler = (apiMsg: ApiMessage) => {
+  const chatId = getChatId(apiMsg.chat) || (apiMsg.chatId ?? "");
+  if (!chatId) return;
+  
+    if(currentUser?._id === apiMsg.sender?._id) return; // ignore own messages
+    
     const mapped = mapMessage(apiMsg);
 
-    appendMessage(chatId, mapped);
+    setMessagesMap((prev) => {
+      const existing = prev[chatId] ?? [];
 
-    setChats((prev) => {
-      const updated = prev.map((c) =>
-        c.id === chatId
-          ? {
-              ...c,
-              message: apiMsg.content ?? "",
-              time: mapped.time,
-              unread:
-                c.id === activeChatId
-                  ? 0
-                  : (c.unread ?? 0) + 1,
-            }
-          : c
-      );
+      if (existing.some((m) => m._id === mapped._id)) {
+        return prev;
+      }
 
-      return sortChats(updated);
+      return {
+        ...prev,
+        [chatId]: [...existing, mapped].sort(
+          (a, b) =>
+            new Date(a.time).getTime() -
+            new Date(b.time).getTime()
+        ),
+      };
     });
+
+    setChats((prev) =>
+      sortChats(
+        prev.map((c) =>
+          c.id === chatId
+            ? {
+                ...c,
+                message: mapped.text,
+                time: mapped.time,
+                unread:
+                  chatId === activeChatId
+                    ? 0
+                    : (c.unread ?? 0) + 1,
+              }
+            : c
+        )
+      )
+    );
   };
 
   socket.on("receive_message", handler);
@@ -441,33 +468,26 @@ const fetchChats = useCallback(
   return () => {
     socket.off("receive_message", handler);
   };
-}, [activeChatId, appendMessage]);
+}, [activeChatId]);
 
   /* ── 7. Typing indicator receivers ── */
- useEffect(() => {
-  const startHandler = ({ chatId }: TypingEvent) => {
-    setTypingMap((prev) => ({
-      ...prev,
-      [chatId]: true,
-    }));
+useEffect(() => {
+  const startHandler = ({ chatId, userId }: TypingEvent) => {
+    if (!chatId) return;
+
+    setTypingMap((prev) => ({ ...prev, [chatId]: true }));
 
     clearTimeout(typingTimerRef.current[chatId]);
-
     typingTimerRef.current[chatId] = setTimeout(() => {
-      setTypingMap((prev) => ({
-        ...prev,
-        [chatId]: false,
-      }));
+      setTypingMap((prev) => ({ ...prev, [chatId]: false }));
     }, 3000);
   };
 
   const stopHandler = ({ chatId }: TypingEvent) => {
-    clearTimeout(typingTimerRef.current[chatId]);
+    if (!chatId) return;
 
-    setTypingMap((prev) => ({
-      ...prev,
-      [chatId]: false,
-    }));
+    clearTimeout(typingTimerRef.current[chatId]);
+    setTypingMap((prev) => ({ ...prev, [chatId]: false }));
   };
 
   socket.on("typing_start", startHandler);
@@ -478,8 +498,6 @@ const fetchChats = useCallback(
     socket.off("typing_stop", stopHandler);
   };
 }, []); // stable — setTypingMap is stable
-
-
 
   /* ── 8. Typing emitter — debounced ── */
 const handleTyping = useCallback(
@@ -534,8 +552,7 @@ const handleSend = useCallback(() => {
 
   if (!text || !activeChatId) return;
 
-  // stop typing immediately
-  socket.emit('typing_stop', {
+  socket.emit("typing_stop", {
     chatId: activeChatId,
   });
 
@@ -547,85 +564,45 @@ const handleSend = useCallback(() => {
 
   const tempId = `temp_${Date.now()}`;
 
-  const now = new Date().toISOString();
-
-  const optimistic = {
+  const optimistic: Message = {
     _id: tempId,
     text,
     senderId: currentUser._id,
-    senderName: 'You',
-    time: now,
+    senderName: currentUser.name,
+    time: new Date().toISOString(),
     chatId: activeChatId,
+    pending: true,
   };
 
-  // optimistic UI
   appendMessage(activeChatId, optimistic);
 
-  setNewMessage('');
+  setChats((prev) =>
+    sortChats(
+      prev.map((c) =>
+        c.id === activeChatId
+          ? {
+              ...c,
+              message: text,
+              time: optimistic.time,
+            }
+          : c
+      )
+    )
+  );
 
-  apiprivate
-    .post('/chats/message', {
-      chatId: activeChatId,
-      content: text,
-    })
+  setNewMessage("");
 
-    .then(({ data }) => {
-      const real = mapMessage(data.message ?? data);
-
-      // replace temp message
-      setMessagesMap((prev) => {
-        const msgs = (prev[activeChatId] ?? []).filter(
-          (m) => m._id !== tempId,
-        );
-
-        const merged = [...msgs, real].sort(
-          (a, b) =>
-            new Date(a.time).getTime() -
-            new Date(b.time).getTime(),
-        );
-
-        return {
-          ...prev,
-          [activeChatId]: merged,
-        };
-      });
-
-      // update sidebar
-      setChats((prev) =>
-        sortChats(
-          prev.map((c) =>
-            c.id === activeChatId
-              ? {
-                  ...c,
-                  message: text,
-                  time: real.time,
-                }
-              : c,
-          ),
-        ),
-      );
-    })
-
-    .catch((err) => {
-      console.error('Failed to send:', err);
-
-      toast.error('Failed to send message');
-
-      // rollback optimistic
-      setMessagesMap((prev) => ({
-        ...prev,
-        [activeChatId]: (
-          prev[activeChatId] ?? []
-        ).filter((m) => m._id !== tempId),
-      }));
-    });
+  socket.emit("send_message", {
+    sender:{ _id: currentUser._id, name: currentUser.name },
+    chatId: activeChatId,
+    content: text,
+    tempId,
+  });
 }, [
   newMessage,
   activeChatId,
   appendMessage,
   currentUser,
-  setMessagesMap,
-  setChats,
 ]);
 
 const handleKeyDown = (

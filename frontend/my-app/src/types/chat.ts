@@ -56,6 +56,7 @@ export interface ApiMessage {
   chatId?: string;
 }
 export interface TypingEvent {
+  userId: string;
   chatId: string;
 }
 export interface Message {

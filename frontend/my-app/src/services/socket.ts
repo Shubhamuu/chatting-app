@@ -6,3 +6,5 @@ export const socket = io("http://localhost:5000", {
   reconnection: true,
   reconnectionAttempts: 10,
 });
+
+export default socket;
