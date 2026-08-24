@@ -29,6 +29,7 @@ export const getUserChats = async (req, res) => {
     const userId = req.user._id;
 
     const page = Number(req.query.page) || 1;
+    console.log('Fetching chats for user', userId, 'page:', page, 'limit:',req.query.limit);
     const limit = Number(req.query.limit) || 10;
 
     const result = await chatService.getUserChats(
@@ -88,14 +89,17 @@ export const sendMessage = async (req, res) => {
 export const getChatMessages = async (req, res) => {
     try {
         const { chatId } = req.params;
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 20;
+
         if (!chatId) {
             return res.status(400).json({
                 success: false,
                 message: 'Chat ID is required',
             });
         }
-        const messages = await chatService.getChatMessages(chatId);
-       //  console.log('Fetched messages for chat', chatId, messages);
+
+        const messages = await chatService.getChatMessages(chatId, page, limit);
 
         return res.json({
             success: true,

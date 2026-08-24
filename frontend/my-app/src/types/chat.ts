@@ -38,13 +38,19 @@ export interface Chat {
   otherUserId?: string | null;
   isGroup?: boolean;
 }
+export type MessagePagination = {
+  currentPage: number;
+  totalPages: number;
+  hasNextPage: boolean;
+  totalMessages: number;
+};
 
 export interface ApiMessage {
   _id?: string;
   id?: string;
   content?: string;
   text?: string;
-
+conversationId?: string;
   sender?: Participant;
   senderId?: string;
   senderName?: string;
@@ -77,11 +83,16 @@ export interface Pagination {
   hasNextPage: boolean;
   totalChats: number;
 }
-export interface FetchMessagesResponse {
+export type FetchMessagesResponse = {
+  success: boolean;
   messages: {
     messages: ApiMessage[];
+    totalMessages: number;
+    currentPage: number;
+    totalPages: number;
+    hasNextPage: boolean;
   };
-}
+};
 export interface GroupedMessage extends Message {
   from: "me" | "them";
   isFirst: boolean;

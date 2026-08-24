@@ -100,6 +100,7 @@ export const getChatMessages = async (chatId, page = 1, limit = 20) => {
             .limit(limit);
         const totalMessages = await Message.countDocuments({ conversationId: chatId });
         // update messages to seen
+       // console.log(`limit for chat ${chatId}: ${limit}`);
         await Message.updateMany(
             { conversationId: chatId, status: 'sent' },
             { $set: { status: 'seen' } }

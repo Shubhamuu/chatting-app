@@ -3,6 +3,8 @@ import { apiprivate } from '../../services/api';
 import { io } from 'socket.io-client';
 import { toast } from 'sonner';
 import './chat.dashboard.css';
+
+
 const socket = io("http://localhost:5000", {
   withCredentials: true,
   transports: ['websocket'],
@@ -18,10 +20,12 @@ import type {
   ApiChat,
   ApiMessage,
   Pagination,
+  MessagePagination,
   FetchMessagesResponse,
   TypingEvent,
   GroupedMessage,
   FetchChatsResponse,
+  
 
 } from "../../types/chat";
 /* ─────────────────────────────────────────────
@@ -77,7 +81,7 @@ const mapMessage = (msg: ApiMessage): Message => ({
   senderId: msg.sender?._id ?? msg.senderId ?? '',
   senderName: msg.sender?.name ?? msg.senderName ?? '',
   time: msg.createdAt ?? msg.time ?? new Date().toISOString(),
-  chatId: getChatId(msg.chat) || (msg.chatId ?? ""),
+  chatId: msg.conversationId ?? getChatId(msg.chat) ?? msg.chatId ?? "",
 });
 
 const sortChats = (list: Chat[]): Chat[] =>
@@ -187,16 +191,17 @@ const Icon = {
    Component
 ───────────────────────────────────────────── */
 export default function MessagingDashboards() {
+
 const [activeChatId, setActiveChatId] = useState<string | null>(null);
 
 const [chats, setChats] = useState<Chat[]>([]);
 
-const [pagination, setPagination] = useState<Pagination>({
-  currentPage: 1,
-  totalPages: 1,
-  hasNextPage: false,
-  totalChats: 0,
-});
+  const [pagination, setPagination] = useState<Pagination>({
+    currentPage: 1,
+    totalPages: 1,
+    hasNextPage: false,
+    totalChats: 0,
+  });
 
 const [loadingChats, setLoadingChats] = useState<boolean>(false);
 
@@ -205,7 +210,41 @@ const [loadingMore, setLoadingMore] = useState<boolean>(false);
 const [messagesMap, setMessagesMap] = useState<
   Record<string, Message[]>
 >({});
+function smoothScrollToBottomUntilStable(el: HTMLElement, options = {}) {
+  const { maxWaitMs = 3000, stableFramesNeeded = 5 } = options as any;
+  let lastHeight = -1;
+  let stableCount = 0;
+  let rafId: number;
+  const startTime = performance.now();
 
+  const step = () => {
+    const target = el.scrollHeight - el.clientHeight;
+    const distance = target - el.scrollTop;
+
+    // ease toward target instead of snapping
+    if (Math.abs(distance) > 1) {
+      el.scrollTop += distance * 0.2;
+    } else {
+      el.scrollTop = target;
+    }
+
+    const currentHeight = el.scrollHeight;
+    const timedOut = performance.now() - startTime > maxWaitMs;
+
+    if (currentHeight === lastHeight && Math.abs(distance) <= 1) {
+      stableCount++;
+    } else {
+      stableCount = 0;
+      lastHeight = currentHeight;
+    }
+
+    if (stableCount >= stableFramesNeeded || timedOut) return;
+    rafId = requestAnimationFrame(step);
+  };
+
+  rafId = requestAnimationFrame(step);
+  return () => cancelAnimationFrame(rafId);
+}
 const [loadingMessages, setLoadingMessages] =
   useState<boolean>(false);
 
@@ -219,6 +258,8 @@ const [typingMap, setTypingMap] = useState<
 
  const messagesEndRef = useRef<HTMLDivElement | null>(null);
 
+const messagesAreaRef = useRef<HTMLDivElement | null>(null); 
+
 const inputRef = useRef<HTMLInputElement | null>(null);
 
 const chatListRef = useRef<HTMLDivElement | null>(null);
@@ -228,6 +269,14 @@ const typingTimerRef = useRef<
 >({});
 
 const prevChatIdRef = useRef<string | null>(null);
+const isLoadingOlderRef = useRef<boolean>(false); 
+type MessagePaginationMap = Record<string, MessagePagination>;
+
+const [messagePagination, setMessagePagination] = useState<MessagePaginationMap>({});
+
+
+const [loadingMoreMessages, setLoadingMoreMessages] = useState<boolean>(false);
+
 
 const typingEmitTimer = useRef<ReturnType<typeof setTimeout> | null>(
   null
@@ -291,10 +340,7 @@ const totalUnread = chats.reduce(
      to auto-select the first chat on the initial load, not re-fetch
      every time the user switches chats.                               */
 const fetchChats = useCallback(
-  async (
-    page: number = 1,
-    append: boolean = false
-  ): Promise<void> => {
+  async (page: number = 1,append: boolean = false): Promise<void> => {
     page === 1
       ? setLoadingChats(true)
       : setLoadingMore(true);
@@ -354,42 +400,79 @@ const fetchChats = useCallback(
   useEffect(() => { fetchChats(1); }, [fetchChats]);
 
   /* ── 3. Fetch messages ── */
-  const fetchMessages = useCallback(async (chatId: string) => {
-  if (!chatId) return;
+const fetchMessages = useCallback(
+  async (chatId: string, page: number=1, append: boolean = false) => {
+    if (!chatId) return;
 
-  setLoadingMessages(true);
+    page === 1 ? setLoadingMessages(true) : setLoadingMoreMessages(true);
 
-  try {
-    const { data } = await apiprivate.get<FetchMessagesResponse>(
-      `/chats/${chatId}/messages`
-    );
+    // preserve scroll position when prepending older messages
+    const el = messagesAreaRef.current;
+    const prevScrollHeight = el?.scrollHeight ?? 0;
 
-    const raw = data.messages?.messages ?? [];
-
-    const mapped = raw
-      .map(mapMessage)
-      .sort(
-        (a, b) =>
-          new Date(a.time).getTime() -
-          new Date(b.time).getTime()
+    try {
+      console.log('fetchMessages', chatId, 'page', page, 'append', append);
+      const { data } = await apiprivate.get<FetchMessagesResponse>(
+        `/chats/${chatId}/messages?page=${page}`
       );
 
-    setMessagesMap((prev) => ({
-      ...prev,
-      [chatId]: mapped,
-    }));
-  } catch (err) {
-    console.error("Failed to fetch messages:", err);
-    toast.error("Failed to load messages");
+      const {
+        messages: raw,
+        currentPage,
+        totalPages,
+        hasNextPage,
+        totalMessages,
+      } = data.messages;
 
-    setMessagesMap((prev) => ({
-      ...prev,
-      [chatId]: [],
-    }));
-  } finally {
-    setLoadingMessages(false);
-  }
-}, []); // stable
+      const mapped = raw.map(mapMessage);
+
+      setMessagesMap((prev) => {
+        const existing = prev[chatId] ?? [];
+
+        const combined = append ? [...mapped, ...existing] : mapped;
+
+        const unique = Array.from(
+          new Map(combined.map((m) => [m._id, m] as const)).values()
+        );
+
+        unique.sort(
+          (a, b) => new Date(a.time).getTime() - new Date(b.time).getTime()
+        );
+
+        return { ...prev, [chatId]: unique };
+      });
+
+      setMessagePagination((prev) => ({
+        ...prev,
+        [chatId]: {
+          currentPage,
+          totalPages,
+          hasNextPage,
+          totalMessages,
+        },
+      }));
+
+      // restore scroll offset after older messages are prepended above
+      if (append && el) {
+        requestAnimationFrame(() => {
+          el.scrollTop = el.scrollHeight - prevScrollHeight;
+        });
+      }
+    } catch (err) {
+      console.error("Failed to fetch messages:", err);
+      toast.error("Failed to load messages");
+
+      if (!append) {
+        setMessagesMap((prev) => ({ ...prev, [chatId]: [] }));
+      }
+    } finally {
+      setLoadingMessages(false);
+      setLoadingMoreMessages(false);
+        isLoadingOlderRef.current = false;
+    }
+  },
+  []
+);
 
   /* ── 4. Room management: leave old, join new ── */
   useEffect(() => {
@@ -401,7 +484,7 @@ const fetchChats = useCallback(
     if (!activeChatId) return;
 
     socket.emit('join_room', activeChatId);
-    fetchMessages(activeChatId);
+    fetchMessages(activeChatId,1);
 
     // Clear unread badge when opening this chat
     setChats((prev) =>
@@ -414,7 +497,18 @@ const fetchChats = useCallback(
     if (!currentUser?._id) return;
     socket.emit('join_user', currentUser._id);
   }, []); // run once on mount
+useEffect(() => {
+  if (isLoadingOlderRef.current) {
+    isLoadingOlderRef.current = false;
+    return;
+  }
 
+  const el = messagesAreaRef.current;
+  if (!el) return;
+
+  const cancel = smoothScrollToBottomUntilStable(el);
+  return cancel; // cleanup if currentMessages changes again before it settles
+}, [currentMessages]);
   /* ── 6. receive_message socket handler ──
      Re-registers when activeChatId changes so the badge logic
      correctly knows which chat is currently open.               */
@@ -510,6 +604,7 @@ const handleTyping = useCallback(
     if (!isEmittingTyping.current) {
       socket.emit('typing_start', {
         chatId: activeChatId,
+         userId: currentUser._id, 
       });
 
       isEmittingTyping.current = true;
@@ -524,6 +619,7 @@ const handleTyping = useCallback(
     typingEmitTimer.current = setTimeout(() => {
       socket.emit('typing_stop', {
         chatId: activeChatId,
+         userId: currentUser._id, 
       });
 
       isEmittingTyping.current = false;
@@ -540,11 +636,22 @@ const handleTyping = useCallback(
       fetchChats(pagination.currentPage + 1, true);
     }
   }, [loadingMore, pagination, fetchChats]);
+const handleMessagesScroll = useCallback(() => {
+  const el = messagesAreaRef.current;
+  if (!el || !activeChatId || loadingMoreMessages) return;
 
+  const pag = messagePagination[activeChatId];
+  //console.log('handleMessagesScroll', el.scrollTop, pag);
+  if (!pag?.hasNextPage) return;
+ 
+  if (el.scrollTop <= 40) {
+     console.log('fetching older messages for chat', activeChatId, 'page', pag.currentPage + 1);
+    isLoadingOlderRef.current = true;
+    fetchMessages(activeChatId, pag.currentPage + 1, true);
+  }
+}, [activeChatId, loadingMoreMessages, messagePagination, fetchMessages]);
       /* ── 10. Auto-scroll to latest message ── */
-  useEffect(() => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  }, [currentMessages]);
+
 
   /* ── 11. Send message ── */
 const handleSend = useCallback(() => {
@@ -554,6 +661,7 @@ const handleSend = useCallback(() => {
 
   socket.emit("typing_stop", {
     chatId: activeChatId,
+     userId: currentUser._id, 
   });
 
   isEmittingTyping.current = false;
@@ -816,7 +924,17 @@ const groupedMessages: GroupedMessage[] =
               </div>
 
               {/* Messages */}
-              <div className="messages-area">
+              <div
+  className="messages-area"
+  ref={messagesAreaRef}
+  onScroll={handleMessagesScroll}
+>
+  {loadingMoreMessages && (
+    <div style={{ textAlign: 'center', padding: 8, color: 'var(--text-muted)', fontSize: 12 }}>
+      <Icon.Loader /> Loading older messages…
+    </div>
+  )}
+
                 {loadingMessages ? (
                   <div style={{ margin: 'auto', display: 'flex', alignItems: 'center', gap: 8, color: 'var(--text-muted)', fontSize: 13 }}>
                     <Icon.Loader /> Loading messages…
